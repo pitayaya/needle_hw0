@@ -20,7 +20,7 @@ def add(x, y):
         Sum of x + y
     """
     ### BEGIN YOUR CODE
-    pass
+    return x + y
     ### END YOUR CODE
 
 
@@ -48,7 +48,24 @@ def parse_mnist(image_filename, label_filename):
                 for MNIST will contain the values 0-9.
     """
     ### BEGIN YOUR CODE
-    pass
+    # 读取图像文件
+    with gzip.open(image_filename, 'rb') as f:
+        # 跳过前16个字节（魔数、数量、行数、列数）
+        _ = np.frombuffer(f.read(16), dtype=np.uint8)
+        # 读取图像数据
+        buf = f.read()
+        data = np.frombuffer(buf, dtype=np.uint8)
+        # 将数据转换为二维数组
+        X = data.reshape(-1, 28 * 28).astype(np.float32) / 255.0
+
+    with gzip.open(label_filename, 'rb') as f:
+        # 跳过前8个字节（魔数、数量）
+        _ = np.frombuffer(f.read(8), dtype=np.uint8)
+        # 读取标签数据
+        buf = f.read()
+        y = np.frombuffer(buf, dtype=np.uint8)
+    
+    return X, y
     ### END YOUR CODE
 
 
@@ -68,7 +85,20 @@ def softmax_loss(Z, y):
         Average softmax loss over the sample.
     """
     ### BEGIN YOUR CODE
-    pass
+    # 计算指数化的logits
+    exp_Z = np.exp(Z)
+    # 沿类别轴计算指数化logits的总和
+    sum_exp_Z = np.sum(exp_Z, axis=1)
+    # 计算指数化logits总和的对数
+    log_sum_exp_Z = np.log(sum_exp_Z)
+    # 获取真实标签对应的logit值
+    correct_logit = Z[np.arange(Z.shape[0]), y]
+    # 计算每个样本的Softmax损失
+    loss = log_sum_exp_Z - correct_logit
+    # 计算批次上的平均损失
+    avg_loss = np.mean(loss)
+
+    return avg_loss
     ### END YOUR CODE
 
 
@@ -91,7 +121,34 @@ def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    # 获取样本数量和特征维度
+    num_examples, input_dim = X.shape
+    num_classes = theta.shape[1]
+
+    # 遍历所有批次
+    for i in range(0, num_examples, batch):
+        # 提取当前批次的数据
+        X_batch = X[i:i + batch]
+        y_batch = y[i:i + batch]
+
+        # 计算当前批次的预测值 Z (logits)
+        Z = X_batch @ theta  # 形状为 (batch_size, num_classes)
+
+        # 计算 Softmax 概率
+        exp_Z = np.exp(Z)
+        sum_exp_Z = np.sum(exp_Z, axis=1, keepdims=True)  # 形状为 (batch_size, 1)
+        probs = exp_Z / sum_exp_Z  # Softmax 归一化后的概率，形状为 (batch_size, num_classes)
+
+        # 构造 one-hot 编码的真实标签
+        batch_size = X_batch.shape[0]
+        I_y = np.zeros_like(probs)  # 初始化为零矩阵
+        I_y[np.arange(batch_size), y_batch] = 1  # 将真实标签位置设为 1
+
+        # 计算梯度
+        grad = X_batch.T @ (probs - I_y) / batch  # 形状为 (input_dim, num_classes)
+
+        # 更新参数 theta
+        theta -= lr * grad
     ### END YOUR CODE
 
 
@@ -118,7 +175,38 @@ def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    # 获取数据的基本信息
+    num_examples, input_dim = X.shape
+    hidden_dim, num_classes = W2.shape
+
+    # 遍历所有批次
+    for i in range(0, num_examples, batch):
+        #提取当前批次的数据
+        X_batch = X[i:i + batch]
+        y_batch = y[i:i + batch]
+        batch_size = X_batch.shape[0]  # 当前批次的实际大小
+
+        # Step 1: 前向传播
+        Z1 = X_batch @ W1 # 第一层线性变换，形状为 (batch_size, hidden_dim)
+        A1 = np.maximum(Z1, 0)  # ReLU 激活函数，形状为 (batch_size, hidden_dim)
+        Z2 = A1 @ W2
+
+        # Step 2: Softmax 和 one-hot 编码
+        exp_Z2 = np.exp(Z2)
+        sum_exp_Z2 = np.sum(exp_Z2, axis=1, keepdims=True)  # 形状为 (batch_size, 1)
+        probs = exp_Z2 / sum_exp_Z2  # Softmax 概率，形状为 (batch_size, num_classes)
+
+        # 构造 one-hot 编码的真实标签
+        I_y = np.zeros_like(probs)  # 初始化为零矩阵
+        I_y[np.arange(batch_size), y_batch] = 1  # 将真实标签位置设为 1
+
+        # Step 3: 计算梯度
+        G2 = probs - I_y  # 第二层的梯度，形状为
+        G1 = (Z1 > 0) * (G2 @ W2.T)  # 第一层的梯度，形状为 (batch_size, hidden_dim)
+
+        # 更新权重
+        W2 -= lr * (A1.T @ G2) / batch_size  # 更新第二层权重
+        W1 -= lr * (X_batch.T @ G1) / batch_size  # 更新第一层权重
     ### END YOUR CODE
 
 
@@ -131,7 +219,7 @@ def loss_err(h,y):
 
 
 def train_softmax(X_tr, y_tr, X_te, y_te, epochs=10, lr=0.5, batch=100,
-                  cpp=False):
+                  cpp=True):
     """ Example function to fully train a softmax regression classifier """
     theta = np.zeros((X_tr.shape[1], y_tr.max()+1), dtype=np.float32)
     print("| Epoch | Train Loss | Train Err | Test Loss | Test Err |")

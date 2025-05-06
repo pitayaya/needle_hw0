@@ -34,6 +34,65 @@ void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
 
     /// BEGIN YOUR CODE
 
+    // 分配临时数组用于存储 logits、概率和梯度
+    float *Z = new float[batch * k];          // Logits: (batch_size, num_classes)
+    float *exp_Z = new float[batch * k];      // 指数化 logits
+    float *probs = new float[batch * k];      // Softmax 概率
+    float *grad_theta = new float[n * k];     // 参数 theta 的梯度
+
+    // 按小批量遍历数据
+    for (size_t i = 0; i < m; i += batch) {
+        size_t current_batch_size = std::min(batch, m - i);  // 当前批次的实际大小
+
+        // 第一步：计算 logits Z = X_batch @ theta
+        for (size_t b = 0; b < current_batch_size; ++b) {
+            for (size_t c = 0; c < k; ++c) {
+                Z[b * k + c] = 0.0f;
+                for (size_t d = 0; d < n; ++d) {
+                    Z[b * k + c] += X[(i + b) * n + d] * theta[d * k + c];
+                }
+            }
+        }
+
+        // 第二步：计算 exp(Z) 和 sum(exp(Z))，并对每个样本进行归一化得到概率
+        for (size_t b = 0; b < current_batch_size; ++b) {
+            float sum_exp = 0.0f;
+            for (size_t c = 0; c < k; ++c) {
+                exp_Z[b * k + c] = std::exp(Z[b * k + c]);
+                sum_exp += exp_Z[b * k + c];
+            }
+            // 归一化得到概率分布
+            for (size_t c = 0; c < k; ++c) {
+                probs[b * k + c] = exp_Z[b * k + c] / sum_exp;
+            }
+        }
+
+        // 第三步：计算损失函数相对于 theta 的梯度
+        std::fill(grad_theta, grad_theta + n * k, 0.0f);  // 初始化梯度为 0
+        for (size_t b = 0; b < current_batch_size; ++b) {
+            unsigned char true_class = y[i + b];  // 当前样本的真实类别
+            for (size_t c = 0; c < k; ++c) {
+                // 如果是真实类别，梯度因子为 (P - 1)，否则为 P
+                float grad_factor = (c == true_class) ? (probs[b * k + c] - 1.0f) : probs[b * k + c];
+                for (size_t d = 0; d < n; ++d) {
+                    grad_theta[d * k + c] += X[(i + b) * n + d] * grad_factor;
+                }
+            }
+        }
+
+        // 第四步：使用梯度下降更新 theta
+        for (size_t d = 0; d < n; ++d) {
+            for (size_t c = 0; c < k; ++c) {
+                theta[d * k + c] -= lr * grad_theta[d * k + c] / current_batch_size;
+            }
+        }
+    }
+
+    // 释放动态分配的内存
+    delete[] Z;
+    delete[] exp_Z;
+    delete[] probs;
+    delete[] grad_theta;
     /// END YOUR CODE
 }
 
